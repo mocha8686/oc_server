@@ -1,14 +1,15 @@
-package main
+package internal
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"os"
 )
 
-func main() {
-	ln, err := net.Listen("tcp", ":8000")
+func Start(port uint16) {
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
 	if err != nil {
 		slog.Error("Failed to create listener", "error", err)
 		os.Exit(1)
