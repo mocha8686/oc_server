@@ -1,0 +1,15 @@
+linters:
+  enable:
+    - decorder
+    - funlen
+    - gocognit
+    - goconst
+    - protogetter
+    - sloglint
+    - whitespace
+linters-settings:
+  funlen:
+    lines: 100
+    statements: 100
+  goimports:
+    local-prefixes: github.com/mocha8686/oc_server

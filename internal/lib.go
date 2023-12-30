@@ -48,7 +48,7 @@ func handleConnection(conn net.Conn, r *registeries) {
 			return
 		}
 
-		slog.Warn("Failed to read client data", "error", err)
+		slog.Error("Failed to read client data", "error", err)
 		return
 	}
 
