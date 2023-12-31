@@ -1,17 +1,12 @@
 package internal
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
-
-	"github.com/mocha8686/oc_server/internal/oc"
 )
-
-type registeries struct {
-	robots *Registry[Robot]
-}
 
 func Start(port uint16) error {
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
@@ -19,9 +14,7 @@ func Start(port uint16) error {
 		return err
 	}
 
-	r := registeries{
-		robots: NewRegistry[Robot](),
-	}
+	pubsub := NewPubSub()
 
 	slog.Info("Listening", "port", port)
 
@@ -32,66 +25,120 @@ func Start(port uint16) error {
 			continue
 		}
 
-		slog.Info("Client connected")
-		go handleConnection(conn, &r)
+		slog.Info("Connection received")
+
+		go handleConnection(conn, pubsub)
 	}
 }
 
-func handleConnection(conn net.Conn, r *registeries) {
+func handleConnection(conn net.Conn, pubsub *PubSub) {
 	defer conn.Close()
 
-	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
-	if err != nil {
-		if err == io.EOF {
-			slog.Info("Client disconnected")
-			return
-		}
+	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 
-		slog.Error("Failed to read client data", "error", err)
+	idLen, err := rw.ReadByte()
+	if err != nil {
+		slog.Error("Failed to read client ID length")
 		return
 	}
 
-	data := buf[:n]
-	slog.Info("Message received from client", "data", data)
+	idBuf := make([]byte, idLen)
+	if _, err := io.ReadFull(rw, idBuf); err != nil {
+		slog.Error("Failed to read client ID")
+		return
+	}
 
-	typeId := data[0]
+	id := string(idBuf)
+	slog.Info("Client connected", "id", id)
 
-	switch typeId {
-		case OCRobot: // INFO: (echo '\x00\x03Bob'; cat) | nc localhost 8000
-		nameLen := data[1]
-		name := string(data[2 : 2+nameLen])
-		slog.Info("OpenComputers Robot connected", "name", name)
-		robot := oc.NewRobot(name, conn)
-		r.robots.Register(name, robot)
-		defer r.robots.Remove(name)
+	defer pubsub.UnsubscribeAll(id)
 
-		robot.Run()
+	for {
+		if err := processCommand(rw, id, pubsub); err != nil {
+			if err == io.EOF {
+				slog.Info("Client disconnected", "id", id)
+			} else {
+				slog.Error("Error while processing command", "id", id, "error", err)
+			}
+			break
+		}
+	}
+}
 
-		case Tester: // HACK: nasty code !!! (only for testing) (echo '\x01'; cat | nc localhost 8000)
-		slog.Info("Tester connected")
-		for {
-			n, err := conn.Read(buf)
-			if err != nil {
-				if err == io.EOF {
-					slog.Info("Tester disconnected")
-					return
+func processCommand(conn *bufio.ReadWriter, id string, pubsub *PubSub) error {
+	// TODO: heartbeat + recovery
+	const (
+		subscribe = iota
+		unsubscribe
+		publish
+	)
+	slog.Debug("Start read command")
+
+	cmd, err := conn.ReadByte()
+	if err != nil {
+		return err
+	}
+	slog.Debug("Command", "val", cmd)
+
+	topicLen, err := conn.ReadByte()
+	if err != nil {
+		return err
+	}
+	slog.Debug("Topic len", "val", topicLen)
+
+	topicBuf := make([]byte, topicLen)
+	if _, err := io.ReadFull(conn, topicBuf); err != nil {
+		return err
+	}
+	topic := string(topicBuf)
+	slog.Debug("Topic", "val", topic)
+
+	switch cmd {
+	case subscribe:
+		topicChan, err := pubsub.Subscribe(id, topic)
+		if err != nil {
+			return err
+		}
+
+		go func(id, topic string, pubsub *PubSub) {
+			for msg := range topicChan {
+				slog.Info("Client received message", "id", id, "topic", topic, "msg", msg)
+
+				if _, err := conn.WriteString(msg + "\n"); err != nil {
+					slog.Warn("Failed to write incoming message to client", "id", id, "topic", topic, "msg", msg, "error", err)
 				}
 
-				slog.Warn("Failed to read tester command", "error", err)
-				return
+				if err := conn.Flush(); err != nil {
+					slog.Warn("Failed to flush buffer", "id", id, "error", err)
+				}
 			}
+			slog.Debug("Topic channel closed", "id", id, "topic", topic)
+		}(id, topic, pubsub)
+		slog.Info("Client subscribed to topic", "id", id, "topic", topic)
 
-			cmd := string(buf[:n])
-			slog.Info("Command received from tester", "cmd", cmd)
-
-			for _, r := range r.robots.Items() {
-				slog.Info("Sending command to robot", "name", r.Name())
-				r.Cmd() <- cmd
-			}
+	case unsubscribe:
+		if err := pubsub.Unsubscribe(id, topic); err != nil {
+			return err
 		}
+		slog.Info("Client unsubscribed from topic", "id", id, "topic", topic)
+
+	case publish:
+		msgLen, err := conn.ReadByte()
+		if err != nil {
+			return err
+		}
+
+		msgBuf := make([]byte, msgLen)
+		if _, err := io.ReadFull(conn, msgBuf); err != nil {
+			return err
+		}
+		msg := string(msgBuf)
+
+		pubsub.Publish(topic, msg)
+		slog.Info("Client published message to topic", "id", id, "topic", topic, "msg", msg)
 	default:
-		slog.Warn("Unknown client", "typeid", typeId)
-		return
+		return fmt.Errorf("Unknown command %v", cmd)
 	}
+
+	return nil
 }
