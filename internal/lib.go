@@ -35,26 +35,19 @@ func handleConnection(conn net.Conn, pubsub *PubSub) {
 	defer conn.Close()
 
 	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+	c := Client{rw}
 
-	idLen, err := rw.ReadByte()
+	id, err := c.ReadString()
 	if err != nil {
-		slog.Error("Failed to read client ID length")
+		slog.Error("Failed to read ID", "error", err)
 		return
 	}
-
-	idBuf := make([]byte, idLen)
-	if _, err := io.ReadFull(rw, idBuf); err != nil {
-		slog.Error("Failed to read client ID")
-		return
-	}
-
-	id := string(idBuf)
 	slog.Info("Client connected", "id", id)
 
 	defer pubsub.UnsubscribeAll(id)
 
 	for {
-		if err := processCommand(rw, id, pubsub); err != nil {
+		if err := processCommand(c, id, pubsub); err != nil {
 			if err == io.EOF {
 				slog.Info("Client disconnected", "id", id)
 			} else {
@@ -65,7 +58,7 @@ func handleConnection(conn net.Conn, pubsub *PubSub) {
 	}
 }
 
-func processCommand(conn *bufio.ReadWriter, id string, pubsub *PubSub) error {
+func processCommand(c Client, id string, pubsub *PubSub) error {
 	logger := slog.With("id", id)
 
 	// TODO: heartbeat + recovery
@@ -74,25 +67,18 @@ func processCommand(conn *bufio.ReadWriter, id string, pubsub *PubSub) error {
 		unsubscribe
 		publish
 	)
-	logger.Debug("Start read command")
+	logger.Debug("Start command")
 
-	cmd, err := conn.ReadByte()
+	cmd, err := c.ReadByte()
 	if err != nil {
 		return err
 	}
 	logger.Debug("Command", "val", cmd)
 
-	topicLen, err := conn.ReadByte()
+	topic, err := c.ReadString()
 	if err != nil {
 		return err
 	}
-	logger.Debug("Topic len", "val", topicLen)
-
-	topicBuf := make([]byte, topicLen)
-	if _, err := io.ReadFull(conn, topicBuf); err != nil {
-		return err
-	}
-	topic := string(topicBuf)
 	logger.Debug("Topic", "val", topic)
 
 	logger = logger.With("topic", topic)
@@ -108,11 +94,11 @@ func processCommand(conn *bufio.ReadWriter, id string, pubsub *PubSub) error {
 			for msg := range topicChan {
 				logger.Info("Client received message", "msg", msg)
 
-				if _, err := conn.WriteString(msg + "\n"); err != nil {
+				if _, err := c.WriteString(msg + "\n"); err != nil {
 					logger.Warn("Failed to write incoming message to client", "msg", msg, "error", err)
 				}
 
-				if err := conn.Flush(); err != nil {
+				if err := c.Flush(); err != nil {
 					logger.Warn("Failed to flush buffer", "error", err)
 				}
 			}
@@ -127,16 +113,10 @@ func processCommand(conn *bufio.ReadWriter, id string, pubsub *PubSub) error {
 		logger.Info("Client unsubscribed from topic")
 
 	case publish:
-		msgLen, err := conn.ReadByte()
+		msg, err := c.ReadString()
 		if err != nil {
 			return err
 		}
-
-		msgBuf := make([]byte, msgLen)
-		if _, err := io.ReadFull(conn, msgBuf); err != nil {
-			return err
-		}
-		msg := string(msgBuf)
 
 		pubsub.Publish(topic, msg)
 		logger.Info("Client published message to topic", "msg", msg)
