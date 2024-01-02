@@ -18,10 +18,12 @@ func NewRegistry() *Registry {
 }
 
 func (r *Registry) Register(id string) error {
-	slog.Debug("Register", "id", id)
+	logger := slog.With("id", id)
+
+	logger.Debug("Register")
 
 	if _, ok := r.ids[id]; ok {
-		slog.Debug("ID in use", "id", id)
+		logger.Debug("ID in use")
 		return IdInUse
 	}
 	r.ids[id] = struct{}{}
@@ -29,10 +31,12 @@ func (r *Registry) Register(id string) error {
 }
 
 func (r *Registry) Unregister(id string) {
-	slog.Debug("Unregister", "id", id)
+	logger := slog.With("id", id)
+
+	logger.Debug("Unregister")
 
 	if _, ok := r.ids[id]; !ok {
-		slog.Debug("ID not registered", "id", id)
+		logger.Debug("ID not registered")
 		return
 	}
 	delete(r.ids, id)

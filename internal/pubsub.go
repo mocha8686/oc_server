@@ -34,15 +34,20 @@ func NewPubSub() *PubSub {
 }
 
 func (p *PubSub) Subscribe(id, topic string) (<-chan string, error) {
-	slog.Debug("Subscribe", "id", id, "topic", topic)
+	logger := slog.With("id", id, "topic", topic)
+
+	logger.Debug("Subscribe")
 
 	p.Lock()
 	defer p.Unlock()
 
 	if p.topics[topic] == nil {
+		logger.Debug("Topic is uninitialized, creating map")
 		p.topics[topic] = make(Topic)
 	}
+
 	if p.topics[topic][id] != nil {
+		logger.Debug("Already subscribed")
 		return nil, AlreadySubscribed
 	}
 
@@ -52,12 +57,15 @@ func (p *PubSub) Subscribe(id, topic string) (<-chan string, error) {
 }
 
 func (p *PubSub) Unsubscribe(id, topic string) error {
-	slog.Debug("Unsubscribe", "id", id, "topic", topic)
+	logger := slog.With("id", id, "topic", topic)
+
+	logger.Debug("Unsubscribe")
 
 	p.Lock()
 	defer p.Unlock()
 
 	if p.topics[topic] == nil || p.topics[topic][id] == nil {
+		logger.Debug("Not subscribed")
 		return NotSubscribed
 	}
 
@@ -82,17 +90,20 @@ func (p *PubSub) UnsubscribeAll(id string) {
 }
 
 func (p *PubSub) Publish(topic, message string) {
-	slog.Debug("Publish", "topic", topic, "msg", message)
+	logger := slog.With("topic", topic)
+
+	logger.Debug("Publish", "msg", message)
 
 	p.RLock()
 	defer p.RUnlock()
 
 	if p.topics[topic] == nil {
+		logger.Debug("Topic is uninitialized")
 		return
 	}
 
 	for id, in := range p.topics[topic] {
-		slog.Debug("Publishing to client", "id", id)
+		logger.Debug("Publishing to client", "id", id)
 		in <- message
 	}
 }
