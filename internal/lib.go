@@ -67,19 +67,15 @@ func processCommand(c Client, id string, pubsub *PubSub) error {
 		unsubscribe
 		publish
 	)
-	logger.Debug("Start command")
-
 	cmd, err := c.ReadByte()
 	if err != nil {
 		return err
 	}
-	logger.Debug("Command", "val", cmd)
 
 	topic, err := c.ReadString()
 	if err != nil {
 		return err
 	}
-	logger.Debug("Topic", "val", topic)
 
 	logger = logger.With("topic", topic)
 
