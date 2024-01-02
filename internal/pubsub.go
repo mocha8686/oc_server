@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 )
 
@@ -28,6 +29,8 @@ func NewPubSub() *PubSub {
 }
 
 func (p *PubSub) Subscribe(id, topic string) (<-chan string, error) {
+	slog.Debug("Subscribe", "id", id, "topic", topic)
+
 	p.Lock()
 	defer p.Unlock()
 
@@ -44,6 +47,8 @@ func (p *PubSub) Subscribe(id, topic string) (<-chan string, error) {
 }
 
 func (p *PubSub) Unsubscribe(id, topic string) error {
+	slog.Debug("Unsubscribe", "id", id, "topic", topic)
+
 	p.Lock()
 	defer p.Unlock()
 
@@ -61,6 +66,8 @@ func (p *PubSub) Unsubscribe(id, topic string) error {
 }
 
 func (p *PubSub) UnsubscribeAll(id string) {
+	slog.Debug("UnsubscribeAll", "id", id)
+
 	p.Lock()
 	defer p.Unlock()
 
@@ -74,6 +81,8 @@ func (p *PubSub) UnsubscribeAll(id string) {
 }
 
 func (p *PubSub) Publish(topic, message string) {
+	slog.Debug("Publish", "topic", topic, "msg", message)
+
 	p.RLock()
 	defer p.RUnlock()
 

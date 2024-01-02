@@ -2,6 +2,7 @@ package internal
 
 import (
 	"errors"
+	"log/slog"
 )
 
 var IdInUse = errors.New("ID in use")
@@ -17,7 +18,10 @@ func NewRegistry() *Registry {
 }
 
 func (r *Registry) Register(id string) error {
+	slog.Debug("Register", "id", id)
+
 	if _, ok := r.ids[id]; ok {
+		slog.Debug("ID in use", "id", id)
 		return IdInUse
 	}
 	r.ids[id] = struct{}{}
@@ -25,7 +29,10 @@ func (r *Registry) Register(id string) error {
 }
 
 func (r *Registry) Unregister(id string) {
+	slog.Debug("Unregister", "id", id)
+
 	if _, ok := r.ids[id]; !ok {
+		slog.Debug("ID not registered", "id", id)
 		return
 	}
 	delete(r.ids, id)
