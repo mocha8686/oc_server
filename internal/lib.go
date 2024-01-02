@@ -63,12 +63,9 @@ func handleConnection(conn net.Conn, ctx Context) {
 			} else {
 				slog.Error("Error while processing command", "id", id, "error", err)
 			}
-			slog.Debug("1")
 			break
 		}
-		slog.Debug("2")
 	}
-	slog.Debug("3")
 }
 
 func processCommand(c Client, id string, ctx Context) error {

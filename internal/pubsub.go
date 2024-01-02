@@ -61,7 +61,7 @@ func (p *PubSub) Unsubscribe(id, topic string) error {
 	}
 
 	close(p.topics[topic][id])
-	p.topics[topic][id] = nil
+	delete(p.topics[topic], id)
 	return nil
 }
 
@@ -76,7 +76,7 @@ func (p *PubSub) UnsubscribeAll(id string) {
 		if channel != nil {
 			close(channel)
 		}
-		p.topics[topic][id] = nil
+		delete(p.topics[topic], id)
 	}
 }
 
@@ -90,7 +90,8 @@ func (p *PubSub) Publish(topic, message string) {
 		return
 	}
 
-	for _, in := range p.topics[topic] {
+	for id, in := range p.topics[topic] {
+		slog.Debug("Publishing to client", "id", id)
 		in <- message
 	}
 }
