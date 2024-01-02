@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"fmt"
+	"errors"
 	"log/slog"
 	"sync"
 )
@@ -10,6 +10,11 @@ const (
 	Subscribe = iota
 	Unsubscribe
 	Publish
+)
+
+var (
+	AlreadySubscribed = errors.New("Already subscribed")
+	NotSubscribed     = errors.New("Not subscribed")
 )
 
 type (
@@ -38,7 +43,7 @@ func (p *PubSub) Subscribe(id, topic string) (<-chan string, error) {
 		p.topics[topic] = make(Topic)
 	}
 	if p.topics[topic][id] != nil {
-		return nil, fmt.Errorf("`%v` is already subscribed to `%v`", id, topic)
+		return nil, AlreadySubscribed
 	}
 
 	in := make(chan string, 1)
@@ -52,12 +57,8 @@ func (p *PubSub) Unsubscribe(id, topic string) error {
 	p.Lock()
 	defer p.Unlock()
 
-	if p.topics[topic] == nil {
-		return fmt.Errorf("`%v` is not subscribed to `%v`", id, topic)
-	}
-
-	if p.topics[topic][id] == nil {
-		return fmt.Errorf("`%v` is not subscribed to `%v`", id, topic)
+	if p.topics[topic] == nil || p.topics[topic][id] == nil {
+		return NotSubscribed
 	}
 
 	close(p.topics[topic][id])
