@@ -4,16 +4,16 @@ local conn = socket.connect('localhost', 8000)
 
 ---@param c table
 ---@param str string
-local function send_string(c, str)
+local function write_string_with_len(c, str)
 	return c:send(string.char(#str) .. str)
 end
 
 -- identify
-send_string(conn, 'gregory')
+write_string_with_len(conn, 'gregory')
 
 -- subscribe
 conn:send '\x00'
-send_string(conn, 'games')
+write_string_with_len(conn, 'games')
 
 -- listen
 while true do

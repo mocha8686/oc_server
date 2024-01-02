@@ -37,12 +37,12 @@ func handleConnection(conn net.Conn, ctx Context) {
 	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 	c := Client{rw}
 
-	id, err := c.ReadString()
+	id, err := c.ReadStringWithLen()
 	if err != nil {
 		slog.Error("Failed to read ID", "error", err)
 		return
 	}
-	if err := ctx.GetRegistry().Register(id); err != nil {
+	if err := ctx.Registry().Register(id); err != nil {
 		slog.Error("Failed to register ID", "err", err)
 		if err == IdInUse {
 			if err := c.WriteStringWithLen(err.Error(), slog.Default()); err != nil {
@@ -53,8 +53,8 @@ func handleConnection(conn net.Conn, ctx Context) {
 	}
 	slog.Info("Client connected", "id", id)
 
-	defer ctx.GetRegistry().Unregister(id)
-	defer ctx.GetPubSub().UnsubscribeAll(id)
+	defer ctx.Registry().Unregister(id)
+	defer ctx.PubSub().UnsubscribeAll(id)
 
 	for {
 		if err := processCommand(c, id, ctx); err != nil {
@@ -63,9 +63,12 @@ func handleConnection(conn net.Conn, ctx Context) {
 			} else {
 				slog.Error("Error while processing command", "id", id, "error", err)
 			}
+			slog.Debug("1")
 			break
 		}
+		slog.Debug("2")
 	}
+	slog.Debug("3")
 }
 
 func processCommand(c Client, id string, ctx Context) error {
@@ -77,7 +80,7 @@ func processCommand(c Client, id string, ctx Context) error {
 		return err
 	}
 
-	topic, err := c.ReadString()
+	topic, err := c.ReadStringWithLen()
 	if err != nil {
 		return err
 	}
@@ -86,7 +89,7 @@ func processCommand(c Client, id string, ctx Context) error {
 
 	switch cmd {
 	case Subscribe:
-		topicChan, err := ctx.GetPubSub().Subscribe(id, topic)
+		topicChan, err := ctx.PubSub().Subscribe(id, topic)
 		if err != nil {
 			return err
 		}
@@ -112,18 +115,18 @@ func processCommand(c Client, id string, ctx Context) error {
 		logger.Info("Client subscribed to topic")
 
 	case Unsubscribe:
-		if err := ctx.GetPubSub().Unsubscribe(id, topic); err != nil {
+		if err := ctx.PubSub().Unsubscribe(id, topic); err != nil {
 			return err
 		}
 		logger.Info("Client unsubscribed from topic")
 
 	case Publish:
-		msg, err := c.ReadString()
+		msg, err := c.ReadStringWithLen()
 		if err != nil {
 			return err
 		}
 
-		ctx.GetPubSub().Publish(topic, msg)
+		ctx.PubSub().Publish(topic, msg)
 		logger.Info("Client published message to topic", "msg", msg)
 	default:
 		return fmt.Errorf("Unknown command %v", cmd)

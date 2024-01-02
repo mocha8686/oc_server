@@ -12,10 +12,10 @@ func NewContext() Context {
 	}
 }
 
-func (c *Context) GetPubSub() *PubSub {
+func (c *Context) PubSub() *PubSub {
 	return c.pubsub
 }
 
-func (c *Context) GetRegistry() *Registry {
+func (c *Context) Registry() *Registry {
 	return c.registry
 }

@@ -11,7 +11,7 @@ type Client struct {
 	*bufio.ReadWriter
 }
 
-func (c *Client) ReadString() (string, error) {
+func (c *Client) ReadStringWithLen() (string, error) {
 	len, err := c.ReadByte()
 	if err != nil {
 		return "", err
