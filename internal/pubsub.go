@@ -41,7 +41,7 @@ func (p *PubSub) Subscribe(id, topic string) (<-chan string, error) {
 		return nil, fmt.Errorf("`%v` is already subscribed to `%v`", id, topic)
 	}
 
-	in := make(chan string)
+	in := make(chan string, 1)
 	p.topics[topic][id] = in
 	return in, nil
 }
