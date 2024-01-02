@@ -14,7 +14,7 @@ func Start(port uint16) error {
 		return err
 	}
 
-	pubsub := NewPubSub()
+	ctx := NewContext()
 
 	slog.Info("Listening", "port", port)
 
@@ -27,11 +27,11 @@ func Start(port uint16) error {
 
 		slog.Info("Connection received")
 
-		go handleConnection(conn, pubsub)
+		go handleConnection(conn, ctx)
 	}
 }
 
-func handleConnection(conn net.Conn, pubsub *PubSub) {
+func handleConnection(conn net.Conn, ctx Context) {
 	defer conn.Close()
 
 	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
@@ -42,12 +42,22 @@ func handleConnection(conn net.Conn, pubsub *PubSub) {
 		slog.Error("Failed to read ID", "error", err)
 		return
 	}
+	if err := ctx.GetRegistry().Register(id); err != nil {
+		slog.Error("Failed to register ID", "err", err)
+		if err == IdInUse {
+			if err := c.WriteStringWithLen(err.Error(), slog.Default()); err != nil {
+				slog.Error("Failed to send error message to client", "error", err)
+			}
+		}
+		return
+	}
 	slog.Info("Client connected", "id", id)
 
-	defer pubsub.UnsubscribeAll(id)
+	defer ctx.GetRegistry().Unregister(id)
+	defer ctx.GetPubSub().UnsubscribeAll(id)
 
 	for {
-		if err := processCommand(c, id, pubsub); err != nil {
+		if err := processCommand(c, id, ctx); err != nil {
 			if err == io.EOF {
 				slog.Info("Client disconnected", "id", id)
 			} else {
@@ -58,7 +68,7 @@ func handleConnection(conn net.Conn, pubsub *PubSub) {
 	}
 }
 
-func processCommand(c Client, id string, pubsub *PubSub) error {
+func processCommand(c Client, id string, ctx Context) error {
 	logger := slog.With("id", id)
 
 	// TODO: heartbeat + recovery
@@ -76,29 +86,33 @@ func processCommand(c Client, id string, pubsub *PubSub) error {
 
 	switch cmd {
 	case Subscribe:
-		topicChan, err := pubsub.Subscribe(id, topic)
+		topicChan, err := ctx.GetPubSub().Subscribe(id, topic)
 		if err != nil {
 			return err
 		}
 
-		go func(id, topic string, pubsub *PubSub) {
+		go func(id, topic string, ctx Context) {
 			for msg := range topicChan {
-				logger.Info("Client received message", "msg", msg)
+				logger = logger.With("msg", msg)
 
-				if _, err := c.WriteString(msg + "\n"); err != nil {
-					logger.Warn("Failed to write incoming message to client", "msg", msg, "error", err)
+				logger.Info("Client received message")
+
+				if err := c.WriteStringWithLen(msg, logger); err != nil {
+					logger.Warn("Failed to write message length to client", "error", err)
+					continue
 				}
 
 				if err := c.Flush(); err != nil {
 					logger.Warn("Failed to flush buffer", "error", err)
+					continue
 				}
 			}
 			logger.Debug("Topic channel closed")
-		}(id, topic, pubsub)
+		}(id, topic, ctx)
 		logger.Info("Client subscribed to topic")
 
 	case Unsubscribe:
-		if err := pubsub.Unsubscribe(id, topic); err != nil {
+		if err := ctx.GetPubSub().Unsubscribe(id, topic); err != nil {
 			return err
 		}
 		logger.Info("Client unsubscribed from topic")
@@ -109,7 +123,7 @@ func processCommand(c Client, id string, pubsub *PubSub) error {
 			return err
 		}
 
-		pubsub.Publish(topic, msg)
+		ctx.GetPubSub().Publish(topic, msg)
 		logger.Info("Client published message to topic", "msg", msg)
 	default:
 		return fmt.Errorf("Unknown command %v", cmd)
@@ -117,5 +131,3 @@ func processCommand(c Client, id string, pubsub *PubSub) error {
 
 	return nil
 }
-
-
