@@ -62,11 +62,6 @@ func processCommand(c Client, id string, pubsub *PubSub) error {
 	logger := slog.With("id", id)
 
 	// TODO: heartbeat + recovery
-	const (
-		subscribe = iota
-		unsubscribe
-		publish
-	)
 	cmd, err := c.ReadByte()
 	if err != nil {
 		return err
@@ -80,7 +75,7 @@ func processCommand(c Client, id string, pubsub *PubSub) error {
 	logger = logger.With("topic", topic)
 
 	switch cmd {
-	case subscribe:
+	case Subscribe:
 		topicChan, err := pubsub.Subscribe(id, topic)
 		if err != nil {
 			return err
@@ -102,13 +97,13 @@ func processCommand(c Client, id string, pubsub *PubSub) error {
 		}(id, topic, pubsub)
 		logger.Info("Client subscribed to topic")
 
-	case unsubscribe:
+	case Unsubscribe:
 		if err := pubsub.Unsubscribe(id, topic); err != nil {
 			return err
 		}
 		logger.Info("Client unsubscribed from topic")
 
-	case publish:
+	case Publish:
 		msg, err := c.ReadString()
 		if err != nil {
 			return err
@@ -122,3 +117,5 @@ func processCommand(c Client, id string, pubsub *PubSub) error {
 
 	return nil
 }
+
+

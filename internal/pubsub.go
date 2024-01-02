@@ -5,6 +5,12 @@ import (
 	"sync"
 )
 
+const (
+	Subscribe = iota
+	Unsubscribe
+	Publish
+)
+
 type (
 	Topics map[string]Topic
 	Topic  map[string]chan string
